@@ -63,14 +63,23 @@ final class Player: ObservableObject {
         let n = min(Int(buf.frameLength), 1024)
         let sr = Float(buf.format.sampleRate)
         guard n > 0 else { return [0, 0, 0, 0, 0] }
-        return [60, 150, 400, 1500, 5000].enumerated().map { i, f in
-            let c = 2 * cosf(2 * Float.pi * f / sr)
-            var s1: Float = 0, s2: Float = 0
-            for k in 0..<n { let s0 = ch[k] + c * s1 - s2; s2 = s1; s1 = s0 }
-            let p = max(0, s1 * s1 + s2 * s2 - c * s1 * s2)
-            return min(1, powf(sqrtf(p) / Float(n) * 7 * (1 + Float(i) * 0.6), 0.8))
+           let freqs: [Float] = [60, 150, 400, 1500, 5000]
+        var result = [Float]()
+        for (i, f) in freqs.enumerated() {
+            let c: Float = 2 * cosf(2 * Float.pi * f / sr)
+            var s1: Float = 0
+            var s2: Float = 0
+            for k in 0..<n {
+                let s0: Float = ch[k] + c * s1 - s2
+                s2 = s1
+                s1 = s0
+            }
+            let p: Float = max(0, s1 * s1 + s2 * s2 - c * s1 * s2)
+            let boost: Float = 1 + Float(i) * 0.6
+            let amp: Float = sqrtf(p) / Float(n) * 7 * boost
+            result.append(min(1, powf(amp, 0.8)))
         }
-    }
+        return result
 
     private func feed(_ l: [Float]) {
         guard isPlaying else { return }

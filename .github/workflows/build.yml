@@ -1,0 +1,32 @@
+
+name: Build IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:  
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build unsigned IPA
+        run: |
+          PROJECT=$(find . -maxdepth 3 -name "*.xcodeproj" | head -1)
+          echo "Project: $PROJECT"
+          SCHEME=$(xcodebuild -list -project "$PROJECT" | awk '/Schemes:/{f=1;next} f&&NF{print $1; exit}')
+          echo "Scheme: $SCHEME"
+          xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
+            -configuration Release -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/*.app Payload/
+          zip -r BeatsPlayer.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeatsPlayer-ipa
+          path: BeatsPlayer.ipa

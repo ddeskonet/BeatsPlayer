@@ -36,9 +36,17 @@ final class Player: ObservableObject {
     private var gen = 0
 
     init() {
-        let lo = eq.bands[0]; lo.filterType = .lowShelf; lo.frequency = 90; lo.bypass = false
-        let mid = eq.bands[1]; mid.filterType = .parametric; mid.frequency = 55; mid.bandwidth = 1; mid.bypass = false
-        engine.attach(node); engine.attach(eq)
+        let lo = eq.bands[0]
+        lo.filterType = .lowShelf
+        lo.frequency = 90
+        lo.bypass = false
+        let mid = eq.bands[1]
+        mid.filterType = .parametric
+        mid.frequency = 55
+        mid.bandwidth = 1
+        mid.bypass = false
+        engine.attach(node)
+        engine.attach(eq)
         engine.connect(eq, to: engine.mainMixerNode, format: nil)
         try? AVAudioSession.sharedInstance().setCategory(.playback)
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -46,8 +54,11 @@ final class Player: ObservableObject {
             let l = Player.analyze(buf)
             DispatchQueue.main.async { self?.feed(l) }
         }
-        Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.tick() }
-        applyFx(); setupRemote()
+        Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+        applyFx()
+        setupRemote()
     }
 
     // MARK: Effects
@@ -63,7 +74,7 @@ final class Player: ObservableObject {
         let n = min(Int(buf.frameLength), 1024)
         let sr = Float(buf.format.sampleRate)
         guard n > 0 else { return [0, 0, 0, 0, 0] }
-           let freqs: [Float] = [60, 150, 400, 1500, 5000]
+        let freqs: [Float] = [60, 150, 400, 1500, 5000]
         var result = [Float]()
         for (i, f) in freqs.enumerated() {
             let c: Float = 2 * cosf(2 * Float.pi * f / sr)
@@ -80,6 +91,7 @@ final class Player: ObservableObject {
             result.append(min(1, powf(amp, 0.8)))
         }
         return result
+    }
 
     private func feed(_ l: [Float]) {
         guard isPlaying else { return }
@@ -127,11 +139,13 @@ final class Player: ObservableObject {
         guard let f = try? AVAudioFile(forReading: t.url) else { return }
         file = f
         duration = max(1, Double(f.length) / f.processingFormat.sampleRate)
-        node.stop(); engine.stop()
+        node.stop()
+        engine.stop()
         engine.disconnectNodeOutput(node)
         engine.connect(node, to: eq, format: f.processingFormat)
         try? engine.start()
-        schedule(0); time = 0
+        schedule(0)
+        time = 0
         withAnimation(.easeInOut(duration: 1.5)) {
             colors = t.cover.flatMap(Player.palette) ?? Player.defaultColors
         }
@@ -141,10 +155,14 @@ final class Player: ObservableObject {
 
     private func schedule(_ frame: AVAudioFramePosition) {
         guard let f = file else { return }
-        node.stop(); gen += 1; let g = gen
+        node.stop()
+        gen += 1
+        let g = gen
         let remaining = AVAudioFrameCount(max(1, f.length - frame))
         node.scheduleSegment(f, startingFrame: frame, frameCount: remaining, at: nil) { [weak self] in
-            DispatchQueue.main.async { if let s = self, s.gen == g { s.next() } }
+            DispatchQueue.main.async {
+                if let s = self, s.gen == g { s.next() }
+            }
         }
         offset = Double(frame) / f.processingFormat.sampleRate
     }
@@ -152,15 +170,19 @@ final class Player: ObservableObject {
     func play() {
         guard file != nil else { return }
         if !engine.isRunning { try? engine.start() }
-        node.play(); isPlaying = true
-        UIApplication.shared.isIdleTimerDisabled = true   // screen stays on
+        node.play()
+        isPlaying = true
+        UIApplication.shared.isIdleTimerDisabled = true
         updateInfo()
     }
+
     func pause() {
-        node.pause(); isPlaying = false
+        node.pause()
+        isPlaying = false
         UIApplication.shared.isIdleTimerDisabled = false
         updateInfo()
     }
+
     func toggle() { isPlaying ? pause() : play() }
     func next() { load(index + 1) }
     func prev() { time > 3 ? seek(0) : load(index - 1) }
@@ -179,23 +201,39 @@ final class Player: ObservableObject {
     // MARK: Lock screen
     private func setupRemote() {
         let c = MPRemoteCommandCenter.shared()
-        c.playCommand.addTarget { [weak self] _ in self?.play(); return .success }
-        c.pauseCommand.addTarget { [weak self] _ in self?.pause(); return .success }
-        c.nextTrackCommand.addTarget { [weak self] _ in self?.next(); return .success }
-        c.previousTrackCommand.addTarget { [weak self] _ in self?.prev(); return .success }
+        c.playCommand.addTarget { [weak self] _ in
+            self?.play()
+            return .success
+        }
+        c.pauseCommand.addTarget { [weak self] _ in
+            self?.pause()
+            return .success
+        }
+        c.nextTrackCommand.addTarget { [weak self] _ in
+            self?.next()
+            return .success
+        }
+        c.previousTrackCommand.addTarget { [weak self] _ in
+            self?.prev()
+            return .success
+        }
         c.changePlaybackPositionCommand.addTarget { [weak self] e in
             if let e = e as? MPChangePlaybackPositionCommandEvent { self?.seek(e.positionTime) }
             return .success
         }
     }
+
     private func updateInfo() {
         guard let t = current else { return }
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: t.title, MPMediaItemPropertyArtist: t.artist,
+            MPMediaItemPropertyTitle: t.title,
+            MPMediaItemPropertyArtist: t.artist,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0]
-        if let img = t.cover { info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img } }
+        if let img = t.cover {
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+        }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
@@ -210,17 +248,32 @@ final class Player: ObservableObject {
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: n, height: n))
         var B = [(r: Double, g: Double, b: Double, w: Double)](repeating: (0, 0, 0, 0), count: 12)
         for i in stride(from: 0, to: px.count, by: 4) {
-            let r = Double(px[i]) / 255, g = Double(px[i + 1]) / 255, b = Double(px[i + 2]) / 255
-            let mx = max(r, g, b), mn = min(r, g, b), l = (mx + mn) / 2, d = mx - mn
+            let r = Double(px[i]) / 255
+            let g = Double(px[i + 1]) / 255
+            let b = Double(px[i + 2]) / 255
+            let mx = max(r, g, b)
+            let mn = min(r, g, b)
+            let l = (mx + mn) / 2
+            let d = mx - mn
             if d < 0.04 { continue }
             let s = d / (1 - abs(2 * l - 1) + 0.0001)
-            let h = mx == r ? ((g - b) / d + 6).truncatingRemainder(dividingBy: 6) : (mx == g ? (b - r) / d + 2 : (r - g) / d + 4)
+            var h: Double
+            if mx == r {
+                h = ((g - b) / d + 6).truncatingRemainder(dividingBy: 6)
+            } else if mx == g {
+                h = (b - r) / d + 2
+            } else {
+                h = (r - g) / d + 4
+            }
             let k = Int(h * 2) % 12
             let w = (s + 0.15) * max(0.1, 1 - abs(l - 0.5) * 1.5)
-            B[k].r += r * w; B[k].g += g * w; B[k].b += b * w; B[k].w += w
+            B[k].r += r * w
+            B[k].g += g * w
+            B[k].b += b * w
+            B[k].w += w
         }
-        var out = B.filter { $0.w > 0 }.sorted { $0.w > $1.w }.prefix(3)
-            .map { Color(red: $0.r / $0.w, green: $0.g / $0.w, blue: $0.b / $0.w) }
+        let top = B.filter { $0.w > 0 }.sorted { $0.w > $1.w }.prefix(3)
+        var out: [Color] = top.map { Color(red: $0.r / $0.w, green: $0.g / $0.w, blue: $0.b / $0.w) }
         guard !out.isEmpty else { return nil }
         while out.count < 3 { out.append(out.last!.opacity(0.8)) }
         return out
